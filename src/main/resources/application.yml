@@ -1,0 +1,61 @@
+# ===================================================================
+# 第一部分：【业务变量区】（初始化项目时，请重点关注带 #【改】 标签的行）
+# ===================================================================
+
+server:
+  port: 8123
+  servlet:
+    context-path: /api # 接口前缀
+
+spring:
+  application:
+    name: CloudMorph #【改】项目名称
+
+  # 【MySQL 数据库连接】
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/cloud_morph?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8 #【改】库名
+    username: root
+    password: your_password #【改】数据库密码
+
+  # 【Redis 缓存连接】
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+
+# ===================================================================
+# 第二部分：【架构常量区】（除扫描路径外，其余通常无需改动）
+# ===================================================================
+
+# 【SpringDoc & Knife4j 接口文档配置】
+springdoc:
+  # 1.【不固定】扫描路径配置
+  group-configs:
+    - group: 'api'
+      paths-to-match: '/**'
+      packages-to-scan: com.pingyu.cloudmorph.controller #【改】必须指向你的 Controller 包
+
+  # 2.【固定】UI 表现配置
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+# 【Knife4j 增强开关】
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+    enable-swagger-models: true
+    swagger-model-name: "数据模型"
+    enable-after-script: true
