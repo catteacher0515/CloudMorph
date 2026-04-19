@@ -7,7 +7,6 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.pingyu.cloudmorph.exception.BusinessException;
 import com.pingyu.cloudmorph.exception.ErrorCode;
-import com.pingyu.cloudmorph.exception.ThrowUtils;
 import com.pingyu.cloudmorph.mapper.UserMapper;
 import com.pingyu.cloudmorph.model.dto.user.UserQueryRequest;
 import com.pingyu.cloudmorph.model.entity.User;
