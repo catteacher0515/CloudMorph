@@ -1,8 +1,5 @@
 package com.pingyu.cloudmorph.core;
 
-import com.pingyu.cloudmorph.ai.AiCodeGeneratorService;
-import com.pingyu.cloudmorph.ai.model.HtmlCodeResult;
-import com.pingyu.cloudmorph.ai.model.MultiFileCodeResult;
 import com.pingyu.cloudmorph.exception.BusinessException;
 import com.pingyu.cloudmorph.exception.ErrorCode;
 import com.pingyu.cloudmorph.model.enums.CodeGenTypeEnum;
@@ -19,7 +16,7 @@ import java.io.File;
 public class AiCodeGeneratorFacade {
 
     @Resource
-    private AiCodeGeneratorService aiCodeGeneratorService;
+    private CodeGenerateStrategyRegistry strategyRegistry;
 
     /**
      * 统一入口：根据类型生成并保存代码
@@ -32,10 +29,11 @@ public class AiCodeGeneratorFacade {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
-        return switch (codeGenTypeEnum) {
-            case HTML -> generateAndSaveHtmlCode(userMessage);
-            case MULTI_FILE -> generateAndSaveMultiFileCode(userMessage);
-        };
+        CodeGenerateStrategy strategy = strategyRegistry.getStrategy(codeGenTypeEnum);
+        if (strategy == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的生成类型：" + codeGenTypeEnum.getValue());
+        }
+        return strategy.generateAndSave(userMessage);
     }
 
     /**
@@ -49,25 +47,10 @@ public class AiCodeGeneratorFacade {
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
-        return switch (codeGenTypeEnum) {
-            case HTML -> aiCodeGeneratorService.generateHtmlCodeStream(userMessage);
-            case MULTI_FILE -> aiCodeGeneratorService.generateMultiFileCodeStream(userMessage);
-        };
-    }
-
-    /**
-     * 生成 HTML 模式的代码并保存
-     */
-    private File generateAndSaveHtmlCode(String userMessage) {
-        HtmlCodeResult result = aiCodeGeneratorService.generateHtmlCode(userMessage);
-        return CodeFileSaver.saveHtmlCodeResult(result);
-    }
-
-    /**
-     * 生成多文件模式的代码并保存
-     */
-    private File generateAndSaveMultiFileCode(String userMessage) {
-        MultiFileCodeResult result = aiCodeGeneratorService.generateMultiFileCode(userMessage);
-        return CodeFileSaver.saveMultiFileCodeResult(result);
+        CodeGenerateStrategy strategy = strategyRegistry.getStrategy(codeGenTypeEnum);
+        if (strategy == null) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的生成类型：" + codeGenTypeEnum.getValue());
+        }
+        return strategy.generateStream(userMessage);
     }
 }
