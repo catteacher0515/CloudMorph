@@ -1,5 +1,7 @@
 package com.pingyu.cloudmorph.service.impl;
 
+import com.pingyu.cloudmorph.core.AiCodeGeneratorFacade;
+import com.pingyu.cloudmorph.model.enums.CodeGenTypeEnum;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import com.mybatisflex.core.paginate.Page;
@@ -33,6 +35,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
     @Override
     public Long createApp(App app, HttpServletRequest request) {
@@ -102,5 +107,26 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             queryWrapper.orderBy(sortField, "ascend".equals(sortOrder));
         }
         return queryWrapper;
+    }
+
+    @Override
+    public void generateApp(Long appId, HttpServletRequest request) {
+        // 1. 校验应用是否存在且属于当前用户
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        if (!app.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
+        }
+        // 2. 获取生成类型
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(app.getCodeGenType());
+        ThrowUtils.throwIf(codeGenTypeEnum == null, ErrorCode.PARAMS_ERROR, "不支持的代码生成类型");
+        // 3. 调用 AI 生成并保存文件
+        aiCodeGeneratorFacade.generateAndSaveCode(app.getInitPrompt(), codeGenTypeEnum, appId);
+        // 4. 更新 deployKey 标记生成完成
+        App updateApp = new App();
+        updateApp.setId(appId);
+        updateApp.setDeployKey(String.valueOf(appId));
+        this.updateById(updateApp);
     }
 }

@@ -18,8 +18,8 @@ public class MultiFileCodeGenerateStrategy extends CodeGenerateTemplate {
     }
 
     @Override
-    protected File doSave(Object result) {
-        return CodeFileSaver.saveMultiFileCodeResult((MultiFileCodeResult) result);
+    protected File doSave(Object result, Long appId) {
+        return CodeFileSaver.saveMultiFileCodeResult((MultiFileCodeResult) result, appId);
     }
 
     @Override

@@ -13,9 +13,10 @@ public interface CodeGenerateStrategy {
      * 生成并保存代码
      *
      * @param userMessage 用户提示词
+     * @param appId       应用 ID
      * @return 保存的目录
      */
-    File generateAndSave(String userMessage);
+    File generateAndSave(String userMessage, Long appId);
 
     /**
      * 流式生成代码

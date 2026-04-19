@@ -18,11 +18,11 @@ public abstract class CodeGenerateTemplate implements CodeGenerateStrategy {
      * 模板方法：生成并保存代码（骨架固定，细节由子类实现）
      */
     @Override
-    public final File generateAndSave(String userMessage) {
+    public final File generateAndSave(String userMessage, Long appId) {
         // 第一步：调 AI 生成
         Object result = doGenerate(userMessage);
         // 第二步：保存文件
-        return doSave(result);
+        return doSave(result, appId);
     }
 
     /**
@@ -39,5 +39,5 @@ public abstract class CodeGenerateTemplate implements CodeGenerateStrategy {
     /**
      * 保存代码到文件（子类实现）
      */
-    protected abstract File doSave(Object result);
+    protected abstract File doSave(Object result, Long appId);
 }

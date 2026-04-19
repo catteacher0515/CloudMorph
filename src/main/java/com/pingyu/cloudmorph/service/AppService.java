@@ -34,4 +34,9 @@ public interface AppService extends IService<App> {
      * 构建查询条件
      */
     QueryWrapper getQueryWrapper(AppQueryRequest appQueryRequest);
+
+    /**
+     * 生成应用代码
+     */
+    void generateApp(Long appId, HttpServletRequest request);
 }

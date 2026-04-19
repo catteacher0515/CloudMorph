@@ -18,8 +18,8 @@ public class HtmlCodeGenerateStrategy extends CodeGenerateTemplate {
     }
 
     @Override
-    protected File doSave(Object result) {
-        return CodeFileSaver.saveHtmlCodeResult((HtmlCodeResult) result);
+    protected File doSave(Object result, Long appId) {
+        return CodeFileSaver.saveHtmlCodeResult((HtmlCodeResult) result, appId);
     }
 
     @Override
