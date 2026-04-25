@@ -1,5 +1,6 @@
 package com.pingyu.cloudmorph.core;
 
+import com.pingyu.cloudmorph.ai.AiCodeGeneratorService;
 import com.pingyu.cloudmorph.ai.model.MultiFileCodeResult;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -15,6 +16,16 @@ public class MultiFileCodeGenerateStrategy extends CodeGenerateTemplate {
     @Override
     protected Object doGenerate(String userMessage) {
         return aiCodeGeneratorService.generateMultiFileCode(userMessage);
+    }
+
+    @Override
+    protected Object doGenerate(String userMessage, AiCodeGeneratorService service) {
+        return service.generateMultiFileCode(userMessage);
+    }
+
+    @Override
+    protected Flux<String> doGenerateStream(String userMessage, AiCodeGeneratorService service) {
+        return service.generateMultiFileCodeStream(userMessage);
     }
 
     @Override

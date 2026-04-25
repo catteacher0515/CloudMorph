@@ -45,7 +45,7 @@ public class StaticResourceController {
                 resourcePath = "/index.html";
             }
 
-            String filePath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + deployKey + resourcePath;
+            String filePath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey + resourcePath;
             File file = new File(filePath);
             if (!file.exists()) {
                 return ResponseEntity.notFound().build();

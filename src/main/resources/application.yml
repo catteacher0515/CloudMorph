@@ -6,12 +6,15 @@ server:
   port: 8123
   servlet:
     context-path: /api # 接口前缀
+    session:
+      cookie:
+        max-age: 2592000
 
 spring:
   application:
     name: CloudMorph #【改】项目名称
-    profiles:
-      active: local
+  profiles:
+    active: local
 
 
   # 【MySQL 数据库连接】
@@ -28,11 +31,17 @@ spring:
       port: 6379
       password:
       database: 0
+      ttl: 3600
       lettuce:
         pool:
           max-active: 8
           max-idle: 8
           min-idle: 0
+
+  # 【Session 配置 - Redis 分布式 Session】
+  session:
+    store-type: redis
+    timeout: 2592000
 
 # ===================================================================
 # 第二部分：【架构常量区】（除扫描路径外，其余通常无需改动）

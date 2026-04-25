@@ -19,22 +19,45 @@ public abstract class CodeGenerateTemplate implements CodeGenerateStrategy {
      */
     @Override
     public final File generateAndSave(String userMessage, Long appId) {
-        // 第一步：调 AI 生成
         Object result = doGenerate(userMessage);
-        // 第二步：保存文件
         return doSave(result, appId);
     }
 
     /**
-     * 流式生成（子类实现）
+     * 使用指定 AI Service 生成并保存代码（用于对话记忆隔离）
+     */
+    public final File generateAndSave(String userMessage, Long appId, AiCodeGeneratorService service) {
+        Object result = doGenerate(userMessage, service);
+        return doSave(result, appId);
+    }
+
+    /**
+     * 使用指定 AI Service 流式生成（用于对话记忆隔离）
+     */
+    public Flux<String> generateStream(String userMessage, AiCodeGeneratorService service) {
+        return doGenerateStream(userMessage, service);
+    }
+
+    /**
+     * 流式生成（子类实现，使用默认 service）
      */
     @Override
     public abstract Flux<String> generateStream(String userMessage);
 
     /**
-     * 调 AI 生成代码（子类实现）
+     * 调 AI 生成代码（使用默认 service，子类实现）
      */
     protected abstract Object doGenerate(String userMessage);
+
+    /**
+     * 调 AI 生成代码（使用指定 service，子类实现）
+     */
+    protected abstract Object doGenerate(String userMessage, AiCodeGeneratorService service);
+
+    /**
+     * 流式生成（使用指定 service，子类实现）
+     */
+    protected abstract Flux<String> doGenerateStream(String userMessage, AiCodeGeneratorService service);
 
     /**
      * 保存代码到文件（子类实现）
