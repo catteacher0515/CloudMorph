@@ -10,13 +10,16 @@ server:
 spring:
   application:
     name: CloudMorph #【改】项目名称
+    profiles:
+      active: local
+
 
   # 【MySQL 数据库连接】
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/cloud_morph?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8 #【改】库名
     username: root
-    password: your_password #【改】数据库密码
+    password: 112233665qw #【改】数据库密码
 
   # 【Redis 缓存连接】
   data:

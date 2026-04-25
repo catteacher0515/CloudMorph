@@ -3,7 +3,9 @@ package com.pingyu.cloudmorph.service.impl;
 import com.pingyu.cloudmorph.core.AiCodeGeneratorFacade;
 import com.pingyu.cloudmorph.model.enums.CodeGenTypeEnum;
 import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.core.io.FileUtil;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -17,10 +19,12 @@ import com.pingyu.cloudmorph.model.entity.User;
 import com.pingyu.cloudmorph.model.vo.AppVO;
 import com.pingyu.cloudmorph.service.AppService;
 import com.pingyu.cloudmorph.service.UserService;
+import com.pingyu.cloudmorph.constant.AppConstant;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -128,5 +132,65 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         updateApp.setId(appId);
         updateApp.setDeployKey(String.valueOf(appId));
         this.updateById(updateApp);
+    }
+
+    @Override
+    public Flux<String> chatToGenCode(Long appId, String message, User loginUser) {
+        // 1. 参数校验
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        // 2. 查询应用信息
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        // 3. 仅本人可生成代码
+        if (!app.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限访问该应用");
+        }
+        // 4. 获取代码生成类型
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(app.getCodeGenType());
+        ThrowUtils.throwIf(codeGenTypeEnum == null, ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型");
+        // 5. 流式生成代码，完成后保存文件
+        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
+    }
+
+    @Override
+    public String deployApp(Long appId, User loginUser) {
+        // 1. 参数校验
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        // 2. 查询应用信息
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        // 3. 仅本人可部署
+        if (!app.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限部署该应用");
+        }
+        // 4. 已有 deployKey 则复用，否则生成 6 位随机标识
+        String deployKey = app.getDeployKey();
+        if (StrUtil.isBlank(deployKey)) {
+            deployKey = RandomUtil.randomString(6);
+        }
+        // 5. 构建源目录路径（code_output/{codeGenType}_{appId}）
+        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + java.io.File.separator
+                + app.getCodeGenType() + "_" + appId;
+        java.io.File sourceDir = new java.io.File(sourceDirPath);
+        if (!sourceDir.exists() || !sourceDir.isDirectory()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用代码不存在，请先生成代码");
+        }
+        // 6. 复制文件到部署目录（code_deploy/{deployKey}）
+        String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + java.io.File.separator + deployKey;
+        try {
+            FileUtil.copyContent(sourceDir, new java.io.File(deployDirPath), true);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
+        }
+        // 7. 更新 deployKey 和部署时间
+        App updateApp = new App();
+        updateApp.setId(appId);
+        updateApp.setDeployKey(deployKey);
+        updateApp.setDeployedTime(java.time.LocalDateTime.now());
+        boolean updated = this.updateById(updateApp);
+        ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "更新部署信息失败");
+        // 8. 返回可访问的 URL
+        return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
     }
 }
