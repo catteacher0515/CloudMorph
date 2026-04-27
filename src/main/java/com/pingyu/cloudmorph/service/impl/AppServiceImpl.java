@@ -48,6 +48,12 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     @Resource
     private ChatHistoryService chatHistoryService;
 
+    @Resource
+    private com.pingyu.cloudmorph.core.handler.StreamHandlerExecutor streamHandlerExecutor;
+
+    @Resource
+    private com.pingyu.cloudmorph.core.builder.VueProjectBuilder vueProjectBuilder;
+
     @Override
     public Long createApp(App app, HttpServletRequest request) {
         // 获取当前登录用户
@@ -156,24 +162,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         ThrowUtils.throwIf(codeGenTypeEnum == null, ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型");
         // 5. 保存用户消息到对话历史
         chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
-        // 6. 流式生成代码，收集完整响应后保存 AI 消息
-        Flux<String> contentFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
-        StringBuilder aiResponseBuilder = new StringBuilder();
-        return contentFlux
-                .map(chunk -> {
-                    aiResponseBuilder.append(chunk);
-                    return chunk;
-                })
-                .doOnComplete(() -> {
-                    String aiResponse = aiResponseBuilder.toString();
-                    if (StrUtil.isNotBlank(aiResponse)) {
-                        chatHistoryService.addChatMessage(appId, aiResponse, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                    }
-                })
-                .doOnError(error -> {
-                    String errorMessage = "AI回复失败: " + error.getMessage();
-                    chatHistoryService.addChatMessage(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                });
+        // 6. 调用 AI 生成代码（流式）
+        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
+        // 7. 根据生成类型调用对应的流处理器
+        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, loginUser, codeGenTypeEnum);
     }
 
     @Override
@@ -193,13 +185,23 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             deployKey = RandomUtil.randomString(6);
         }
         // 5. 构建源目录路径（code_output/{codeGenType}_{appId}）
+        String codeGenType = app.getCodeGenType();
         String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + java.io.File.separator
-                + app.getCodeGenType() + "_" + appId;
+                + codeGenType + "_" + appId;
         java.io.File sourceDir = new java.io.File(sourceDirPath);
         if (!sourceDir.exists() || !sourceDir.isDirectory()) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用代码不存在，请先生成代码");
         }
-        // 6. 复制文件到部署目录（code_deploy/{deployKey}）
+        // 6. Vue 项目特殊处理：执行构建，将 dist 目录作为部署源
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
+        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
+            boolean buildSuccess = vueProjectBuilder.buildProject(sourceDirPath);
+            ThrowUtils.throwIf(!buildSuccess, ErrorCode.SYSTEM_ERROR, "Vue 项目构建失败，请检查代码和依赖");
+            java.io.File distDir = new java.io.File(sourceDirPath, "dist");
+            ThrowUtils.throwIf(!distDir.exists(), ErrorCode.SYSTEM_ERROR, "构建完成但 dist 目录未生成");
+            sourceDir = distDir;
+        }
+        // 7. 复制文件到部署目录（code_deploy/{deployKey}）
         String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + java.io.File.separator + deployKey;
         try {
             FileUtil.copyContent(sourceDir, new java.io.File(deployDirPath), true);
