@@ -6,6 +6,7 @@ import cn.hutool.json.JSONUtil;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.pingyu.cloudmorph.annotation.AuthCheck;
+import com.pingyu.cloudmorph.ai.model.VisualEditResult;
 import com.pingyu.cloudmorph.common.BaseResponse;
 import com.pingyu.cloudmorph.common.DeleteRequest;
 import com.pingyu.cloudmorph.common.ResultUtils;
@@ -263,6 +264,43 @@ public class AppController {
         User loginUser = userService.getLoginUser(request);
         String cover = appService.generateAppCover(requestBody.getAppId(), loginUser);
         return ResultUtils.success(cover);
+    }
+
+    /**
+     * 可视化修改应用代码
+     */
+    @PostMapping("/visual/edit")
+    public BaseResponse<VisualEditResult> visualEditAppCode(@RequestBody AppVisualEditRequest requestBody,
+                                                            HttpServletRequest request) {
+        ThrowUtils.throwIf(requestBody == null || requestBody.getAppId() == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        VisualEditResult result = appService.visualEditAppCode(
+                requestBody.getAppId(),
+                requestBody.getPrompt(),
+                requestBody.getSelectedElement(),
+                loginUser);
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 可视化修改应用代码（流式）
+     */
+    @GetMapping(value = "/visual/edit/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> visualEditAppCodeStream(@RequestParam Long appId,
+                                                                 @RequestParam String prompt,
+                                                                 @RequestParam(required = false) String selectedElement,
+                                                                 HttpServletRequest request) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
+        ThrowUtils.throwIf(StrUtil.isBlank(prompt), ErrorCode.PARAMS_ERROR, "修改需求不能为空");
+        User loginUser = userService.getLoginUser(request);
+        return appService.visualEditAppCodeStream(appId, prompt, selectedElement, loginUser)
+                .map(chunk -> ServerSentEvent.<String>builder()
+                        .data(JSONUtil.toJsonStr(Map.of("d", chunk)))
+                        .build())
+                .concatWith(Mono.just(ServerSentEvent.<String>builder()
+                        .event("done")
+                        .data("")
+                        .build()));
     }
 
     /**

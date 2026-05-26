@@ -5,6 +5,7 @@ import com.pingyu.cloudmorph.ai.AiCodeGeneratorService;
 import com.pingyu.cloudmorph.ai.model.message.AiResponseMessage;
 import com.pingyu.cloudmorph.ai.model.message.ToolExecutedMessage;
 import com.pingyu.cloudmorph.ai.model.message.ToolRequestMessage;
+import com.pingyu.cloudmorph.ai.model.VisualEditResult;
 import com.pingyu.cloudmorph.config.AiCodeGeneratorServiceFactory;
 import com.pingyu.cloudmorph.exception.BusinessException;
 import com.pingyu.cloudmorph.exception.ErrorCode;
@@ -62,6 +63,28 @@ public class AiCodeGeneratorFacade {
                             }
                         });
             }
+        };
+    }
+
+    /**
+     * 可视化修改：仅支持工程项目模式的增量修改结果。
+     */
+    public VisualEditResult editCode(String userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
+        AiCodeGeneratorService service = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
+        return switch (codeGenTypeEnum) {
+            case VUE_PROJECT -> service.editVueProjectCode(appId, userMessage);
+            case HTML, MULTI_FILE -> throw new BusinessException(ErrorCode.PARAMS_ERROR, "当前生成类型不支持可视化修改");
+        };
+    }
+
+    /**
+     * 可视化修改流式输出。
+     */
+    public Flux<String> editCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
+        AiCodeGeneratorService service = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
+        return switch (codeGenTypeEnum) {
+            case VUE_PROJECT -> service.editVueProjectCodeStream(appId, userMessage);
+            case HTML, MULTI_FILE -> Flux.error(new BusinessException(ErrorCode.PARAMS_ERROR, "当前生成类型不支持可视化修改"));
         };
     }
 

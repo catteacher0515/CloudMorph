@@ -7,6 +7,7 @@ import com.pingyu.cloudmorph.model.dto.app.AppQueryRequest;
 import com.pingyu.cloudmorph.model.entity.App;
 import com.pingyu.cloudmorph.model.entity.User;
 import com.pingyu.cloudmorph.model.vo.AppVO;
+import com.pingyu.cloudmorph.ai.model.VisualEditResult;
 import jakarta.servlet.http.HttpServletRequest;
 import reactor.core.publisher.Flux;
 
@@ -68,4 +69,14 @@ public interface AppService extends IService<App> {
      * 为应用生成封面图。
      */
     String generateAppCover(Long appId, User loginUser);
+
+    /**
+     * 可视化修改应用代码。
+     */
+    VisualEditResult visualEditAppCode(Long appId, String prompt, String selectedElement, User loginUser);
+
+    /**
+     * 可视化修改应用代码（流式）。
+     */
+    Flux<String> visualEditAppCodeStream(Long appId, String prompt, String selectedElement, User loginUser);
 }

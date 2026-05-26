@@ -1,6 +1,7 @@
 package com.pingyu.cloudmorph.service.impl;
 
 import com.pingyu.cloudmorph.core.AiCodeGeneratorFacade;
+import com.pingyu.cloudmorph.ai.model.VisualEditResult;
 import com.pingyu.cloudmorph.model.enums.CodeGenTypeEnum;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.RandomUtil;
@@ -273,6 +274,36 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         boolean updated = this.updateById(updateApp);
         ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "更新封面失败");
         return updateApp.getCover();
+    }
+
+    @Override
+    public VisualEditResult visualEditAppCode(Long appId, String prompt, String selectedElement, User loginUser) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(prompt), ErrorCode.PARAMS_ERROR, "修改需求不能为空");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        if (!app.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限修改该应用");
+        }
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(app.getCodeGenType());
+        ThrowUtils.throwIf(codeGenTypeEnum == null, ErrorCode.PARAMS_ERROR, "不支持的代码生成类型");
+        String editPrompt = com.pingyu.cloudmorph.util.VisualEditPromptBuilder.build(prompt, selectedElement, codeGenTypeEnum.getValue());
+        return aiCodeGeneratorFacade.editCode(editPrompt, codeGenTypeEnum, appId);
+    }
+
+    @Override
+    public Flux<String> visualEditAppCodeStream(Long appId, String prompt, String selectedElement, User loginUser) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(prompt), ErrorCode.PARAMS_ERROR, "修改需求不能为空");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        if (!app.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限修改该应用");
+        }
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(app.getCodeGenType());
+        ThrowUtils.throwIf(codeGenTypeEnum == null, ErrorCode.PARAMS_ERROR, "不支持的代码生成类型");
+        String editPrompt = com.pingyu.cloudmorph.util.VisualEditPromptBuilder.build(prompt, selectedElement, codeGenTypeEnum.getValue());
+        return aiCodeGeneratorFacade.editCodeStream(editPrompt, codeGenTypeEnum, appId);
     }
 
     @Override
