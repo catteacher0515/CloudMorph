@@ -10,6 +10,8 @@ import com.pingyu.cloudmorph.model.vo.AppVO;
 import jakarta.servlet.http.HttpServletRequest;
 import reactor.core.publisher.Flux;
 
+import java.io.File;
+
 /**
  * 应用 服务层。
  *
@@ -51,4 +53,19 @@ public interface AppService extends IService<App> {
      * 部署应用，返回可访问的 URL
      */
     String deployApp(Long appId, User loginUser);
+
+    /**
+     * 下载应用代码包。
+     */
+    File downloadAppCode(Long appId, User loginUser);
+
+    /**
+     * 智能选择代码生成类型。
+     */
+    String smartSelectCodeGenType(String prompt);
+
+    /**
+     * 为应用生成封面图。
+     */
+    String generateAppCover(Long appId, User loginUser);
 }

@@ -22,12 +22,18 @@ import com.pingyu.cloudmorph.service.AppService;
 import com.pingyu.cloudmorph.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
@@ -214,6 +220,49 @@ public class AppController {
         User loginUser = userService.getLoginUser(request);
         String deployUrl = appService.deployApp(appId, loginUser);
         return ResultUtils.success(deployUrl);
+    }
+
+    /**
+     * 下载应用代码包
+     */
+    @GetMapping("/download")
+    public void downloadAppCode(@RequestParam Long appId, HttpServletRequest request, HttpServletResponse response) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
+        User loginUser = userService.getLoginUser(request);
+        File zipFile = appService.downloadAppCode(appId, loginUser);
+        try {
+            response.setContentType("application/zip");
+            String fileName = URLEncoder.encode(zipFile.getName(), StandardCharsets.UTF_8);
+            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + fileName);
+            try (FileInputStream inputStream = new FileInputStream(zipFile);
+                 OutputStream outputStream = response.getOutputStream()) {
+                inputStream.transferTo(outputStream);
+                outputStream.flush();
+            }
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "下载失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * AI 智能选择代码生成类型
+     */
+    @PostMapping("/smart/select/code-gen-type")
+    public BaseResponse<String> smartSelectCodeGenType(@RequestBody AppSmartSelectRequest requestBody) {
+        ThrowUtils.throwIf(requestBody == null, ErrorCode.PARAMS_ERROR);
+        String result = appService.smartSelectCodeGenType(requestBody.getPrompt());
+        return ResultUtils.success(result);
+    }
+
+    /**
+     * 生成应用封面图
+     */
+    @PostMapping("/cover/generate")
+    public BaseResponse<String> generateAppCover(@RequestBody AppCoverUpdateRequest requestBody, HttpServletRequest request) {
+        ThrowUtils.throwIf(requestBody == null || requestBody.getAppId() == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        String cover = appService.generateAppCover(requestBody.getAppId(), loginUser);
+        return ResultUtils.success(cover);
     }
 
     /**

@@ -28,6 +28,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.io.File;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -53,6 +54,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private com.pingyu.cloudmorph.core.builder.VueProjectBuilder vueProjectBuilder;
+
+    @Resource
+    private com.pingyu.cloudmorph.config.AppFeatureConfig appFeatureConfig;
 
     @Override
     public Long createApp(App app, HttpServletRequest request) {
@@ -217,6 +221,58 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "更新部署信息失败");
         // 8. 返回可访问的 URL
         return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+    }
+
+    @Override
+    public File downloadAppCode(Long appId, User loginUser) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        if (!app.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限下载该应用");
+        }
+        String codeGenType = app.getCodeGenType();
+        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + java.io.File.separator + codeGenType + "_" + appId;
+        File sourceDir = new File(sourceDirPath);
+        ThrowUtils.throwIf(!sourceDir.exists() || !sourceDir.isDirectory(), ErrorCode.SYSTEM_ERROR, "应用代码不存在，请先生成代码");
+        File zipFile = new File(AppConstant.CODE_OUTPUT_ROOT_DIR, codeGenType + "_" + appId + ".zip");
+        return com.pingyu.cloudmorph.util.CodeArchiveUtils.zipDirectory(sourceDir, zipFile);
+    }
+
+    @Override
+    public String smartSelectCodeGenType(String prompt) {
+        ThrowUtils.throwIf(StrUtil.isBlank(prompt), ErrorCode.PARAMS_ERROR, "需求描述不能为空");
+        String lowerPrompt = prompt.toLowerCase();
+        if (lowerPrompt.contains("vue") || lowerPrompt.contains("工程") || lowerPrompt.contains("组件") || lowerPrompt.contains("项目")) {
+            return CodeGenTypeEnum.VUE_PROJECT.getValue();
+        }
+        if (lowerPrompt.contains("多文件") || lowerPrompt.contains("拆分") || lowerPrompt.contains("html") || lowerPrompt.contains("css") || lowerPrompt.contains("js")) {
+            return CodeGenTypeEnum.MULTI_FILE.getValue();
+        }
+        return CodeGenTypeEnum.HTML.getValue();
+    }
+
+    @Override
+    public String generateAppCover(Long appId, User loginUser) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        if (!app.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限生成封面");
+        }
+        String coverDir = AppConstant.CODE_OUTPUT_ROOT_DIR + java.io.File.separator + "covers";
+        String coverFileName = "app_" + appId + ".png";
+        String filePath = com.pingyu.cloudmorph.util.LocalCoverGenerator.generatePlaceholderCover(
+                new File(AppConstant.CODE_DEPLOY_ROOT_DIR), coverDir, coverFileName);
+
+        App updateApp = new App();
+        updateApp.setId(appId);
+        updateApp.setCover(appFeatureConfig.getCoverBaseUrl().isBlank()
+                ? com.pingyu.cloudmorph.util.LocalCoverGenerator.toFileUrl(filePath)
+                : appFeatureConfig.getCoverBaseUrl() + "/" + coverFileName);
+        boolean updated = this.updateById(updateApp);
+        ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "更新封面失败");
+        return updateApp.getCover();
     }
 
     @Override
