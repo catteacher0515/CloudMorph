@@ -22,32 +22,36 @@ public class VueProjectBuilder {
     }
 
     public boolean buildProject(String projectPath) {
+        return buildProjectResult(projectPath).isSuccess();
+    }
+
+    public VueProjectBuildResult buildProjectResult(String projectPath) {
         File projectDir = new File(projectPath);
         if (!projectDir.exists() || !projectDir.isDirectory()) {
             log.error("项目目录不存在: {}", projectPath);
-            return false;
+            return VueProjectBuildResult.failure("project_dir", "项目目录不存在", projectPath);
         }
         File packageJson = new File(projectDir, "package.json");
         if (!packageJson.exists()) {
             log.error("package.json 文件不存在: {}", packageJson.getAbsolutePath());
-            return false;
+            return VueProjectBuildResult.failure("package_json", "package.json 文件不存在", projectPath);
         }
         log.info("开始构建 Vue 项目: {}", projectPath);
         if (!executeNpmInstall(projectDir)) {
             log.error("npm install 执行失败");
-            return false;
+            return VueProjectBuildResult.failure("npm_install", "npm install 执行失败", projectPath);
         }
         if (!executeNpmBuild(projectDir)) {
             log.error("npm run build 执行失败");
-            return false;
+            return VueProjectBuildResult.failure("npm_build", "npm run build 执行失败", projectPath);
         }
         File distDir = new File(projectDir, "dist");
         if (!distDir.exists()) {
             log.error("构建完成但 dist 目录未生成: {}", distDir.getAbsolutePath());
-            return false;
+            return VueProjectBuildResult.failure("dist_missing", "构建完成但 dist 目录未生成", projectPath);
         }
         log.info("Vue 项目构建成功，dist 目录: {}", distDir.getAbsolutePath());
-        return true;
+        return VueProjectBuildResult.success(projectPath);
     }
 
     private boolean executeNpmInstall(File projectDir) {

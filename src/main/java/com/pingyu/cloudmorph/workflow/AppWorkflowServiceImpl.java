@@ -6,6 +6,7 @@ import com.pingyu.cloudmorph.ai.model.VisualEditResult;
 import com.pingyu.cloudmorph.constant.AppConstant;
 import com.pingyu.cloudmorph.core.AiCodeGeneratorFacade;
 import com.pingyu.cloudmorph.core.builder.VueProjectBuilder;
+import com.pingyu.cloudmorph.core.builder.VueProjectBuildResult;
 import com.pingyu.cloudmorph.exception.BusinessException;
 import com.pingyu.cloudmorph.exception.ErrorCode;
 import com.pingyu.cloudmorph.exception.ThrowUtils;
@@ -45,8 +46,12 @@ public class AppWorkflowServiceImpl implements AppWorkflowService {
     private static final String NODE_CODE_GENERATOR = "code_generator";
     private static final String NODE_PROJECT_BUILDER = "project_builder";
     private static final String NODE_QUALITY_CHECK = "quality_check";
+    private static final String NODE_BUILD_FIX = "build_fix";
     private static final String EDGE_CODE_GENERATOR = "code_generator";
+    private static final String EDGE_BUILD_FIX = "build_fix";
     private static final String EDGE_END = "end";
+    private static final String BUILD_RETRY_COUNT = "buildRetryCount";
+    private static final int MAX_BUILD_RETRY_COUNT = 1;
 
     private final AppService appService;
     private final AiCodeGeneratorFacade aiCodeGeneratorFacade;
@@ -70,6 +75,7 @@ public class AppWorkflowServiceImpl implements AppWorkflowService {
             graph.addNode(NODE_ROUTER, AsyncNodeAction.node_async(this::routeCodeGenerationType));
             graph.addNode(NODE_CODE_GENERATOR, AsyncNodeAction.node_async(this::generateCode));
             graph.addNode(NODE_PROJECT_BUILDER, AsyncNodeAction.node_async(this::buildProject));
+            graph.addNode(NODE_BUILD_FIX, AsyncNodeAction.node_async(this::fixBuild));
             graph.addNode(NODE_QUALITY_CHECK, AsyncNodeAction.node_async(this::qualityCheck));
 
             graph.addEdge(StateGraph.START, NODE_IMAGE_COLLECTOR);
@@ -80,7 +86,11 @@ public class AppWorkflowServiceImpl implements AppWorkflowService {
                     EDGE_END, StateGraph.END
             ));
             graph.addEdge(NODE_CODE_GENERATOR, NODE_PROJECT_BUILDER);
-            graph.addEdge(NODE_PROJECT_BUILDER, NODE_QUALITY_CHECK);
+            graph.addConditionalEdges(NODE_PROJECT_BUILDER, AsyncEdgeAction.edge_async(this::routeAfterBuild), Map.of(
+                    EDGE_BUILD_FIX, NODE_BUILD_FIX,
+                    EDGE_END, NODE_QUALITY_CHECK
+            ));
+            graph.addEdge(NODE_BUILD_FIX, NODE_PROJECT_BUILDER);
             graph.addEdge(NODE_QUALITY_CHECK, StateGraph.END);
 
             this.compiledGraph = graph.compile();
@@ -174,26 +184,75 @@ public class AppWorkflowServiceImpl implements AppWorkflowService {
         String actualType = state.value(WorkflowState.ACTUAL_CODE_GEN_TYPE, "");
         if (!CodeGenTypeEnum.VUE_PROJECT.getValue().equals(actualType)) {
             return Map.of(
-                    WorkflowState.PROJECT_BUILT, false
+                    WorkflowState.PROJECT_BUILT, false,
+                    "buildFailedStage", "",
+                    "buildErrorMessage", "",
+                    WorkflowState.QUALITY_PASSED, true,
+                    WorkflowState.QUALITY_MESSAGE, "非 Vue 工程模式，跳过构建"
             );
         }
         Long appId = state.value(WorkflowState.APP_ID, 0L);
         String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + actualType + "_" + appId;
-        boolean success = vueProjectBuilder.buildProject(sourceDirPath);
+        VueProjectBuildResult buildResult = vueProjectBuilder.buildProjectResult(sourceDirPath);
+        boolean success = buildResult.isSuccess();
         return Map.of(
-                WorkflowState.PROJECT_BUILT, success
+                WorkflowState.PROJECT_BUILT, success,
+                "buildFailedStage", success ? "" : StrUtil.nullToEmpty(buildResult.getFailedStage()),
+                "buildErrorMessage", success ? "" : StrUtil.nullToEmpty(buildResult.getErrorMessage()),
+                "buildProjectPath", StrUtil.nullToEmpty(buildResult.getProjectPath()),
+                BUILD_RETRY_COUNT, state.value(BUILD_RETRY_COUNT, 0)
+        );
+    }
+
+    private String routeAfterBuild(WorkflowState state) {
+        boolean projectBuilt = state.value(WorkflowState.PROJECT_BUILT, false);
+        if (projectBuilt) {
+            return EDGE_END;
+        }
+        String failedStage = state.value("buildFailedStage", "");
+        String errorMessage = state.value("buildErrorMessage", "");
+        int retryCount = state.value(BUILD_RETRY_COUNT, 0);
+        if (StrUtil.isBlank(failedStage) || StrUtil.isBlank(errorMessage)) {
+            return EDGE_END;
+        }
+        if (retryCount >= MAX_BUILD_RETRY_COUNT) {
+            return EDGE_END;
+        }
+        return EDGE_BUILD_FIX;
+    }
+
+    private Map<String, Object> fixBuild(WorkflowState state) {
+        Long appId = state.value(WorkflowState.APP_ID, 0L);
+        String prompt = state.value(WorkflowState.PROMPT, "");
+        String failedStage = state.value("buildFailedStage", "");
+        String errorMessage = state.value("buildErrorMessage", "");
+        String buildProjectPath = state.value("buildProjectPath", "");
+        String fixPrompt = buildFixPrompt(prompt, failedStage, errorMessage, buildProjectPath);
+        aiCodeGeneratorFacade.generateAndSaveCode(fixPrompt, CodeGenTypeEnum.VUE_PROJECT, appId);
+        boolean success = vueProjectBuilder.buildProject(buildProjectPath);
+        return Map.of(
+                WorkflowState.PROJECT_BUILT, success,
+                "buildFailedStage", success ? "" : failedStage,
+                "buildErrorMessage", success ? "" : errorMessage,
+                WorkflowState.QUALITY_PASSED, success,
+                WorkflowState.QUALITY_MESSAGE, success ? "构建修复成功" : "构建修复后仍然失败",
+                BUILD_RETRY_COUNT, state.value(BUILD_RETRY_COUNT, 0) + 1
         );
     }
 
     private Map<String, Object> qualityCheck(WorkflowState state) {
         String outputPath = state.value(WorkflowState.OUTPUT_PATH, "");
         boolean projectBuilt = state.value(WorkflowState.PROJECT_BUILT, false);
+        String buildFailedStage = state.value("buildFailedStage", "");
         boolean passed = StrUtil.isNotBlank(outputPath);
         if (passed) {
             passed = FileUtil.exist(outputPath);
         }
         if (projectBuilt) {
             passed = passed && FileUtil.exist(new File(outputPath, "dist"));
+        }
+        if (StrUtil.isNotBlank(buildFailedStage)) {
+            passed = false;
         }
         String message = passed ? "工作流执行成功" : "工作流执行后未找到预期产物";
         return Map.of(
@@ -214,6 +273,29 @@ public class AppWorkflowServiceImpl implements AppWorkflowService {
         result.setProjectBuilt(state.value(WorkflowState.PROJECT_BUILT, false));
         result.setQualityPassed(state.value(WorkflowState.QUALITY_PASSED, false));
         result.setQualityMessage(state.value(WorkflowState.QUALITY_MESSAGE, ""));
+        result.setBuildFailedStage(state.value("buildFailedStage", ""));
+        result.setBuildErrorMessage(state.value("buildErrorMessage", ""));
         return result;
+    }
+
+    private String buildFixPrompt(String prompt, String failedStage, String errorMessage, String buildProjectPath) {
+        return """
+                这是一个 Vue3 + Vite 项目的构建修复任务。
+
+                原始需求：
+                %s
+
+                构建失败阶段：
+                %s
+
+                错误摘要：
+                %s
+
+                目标目录：
+                %s
+
+                请在尽量不改动无关文件的前提下，修复构建问题，并保持项目可运行、可构建。
+                """
+                .formatted(prompt, failedStage, errorMessage, buildProjectPath);
     }
 }

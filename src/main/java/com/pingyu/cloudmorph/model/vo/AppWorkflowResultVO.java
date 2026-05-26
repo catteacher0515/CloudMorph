@@ -34,6 +34,10 @@ public class AppWorkflowResultVO implements Serializable {
 
     private String qualityMessage;
 
+    private String buildFailedStage;
+
+    private String buildErrorMessage;
+
     public void setRecommendedCodeGenType(CodeGenTypeEnum codeGenTypeEnum) {
         this.recommendedCodeGenType = codeGenTypeEnum == null ? null : codeGenTypeEnum.getValue();
     }

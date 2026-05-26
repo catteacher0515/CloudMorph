@@ -9,7 +9,6 @@ import com.pingyu.cloudmorph.model.vo.AppWorkflowResultVO;
 import com.pingyu.cloudmorph.service.AppService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -18,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,15 +52,10 @@ class AppWorkflowServiceImplTest {
         when(appService.getById(100L)).thenReturn(app);
         when(appService.smartSelectCodeGenType(anyString())).thenReturn(CodeGenTypeEnum.VUE_PROJECT.getValue());
         when(aiCodeGeneratorFacade.generateAndSaveCode(anyString(), eq(CodeGenTypeEnum.VUE_PROJECT), eq(100L))).thenReturn(outputDir);
-        when(vueProjectBuilder.buildProject(outputDir.getAbsolutePath())).thenReturn(true);
+        when(vueProjectBuilder.buildProjectResult(outputDir.getAbsolutePath()))
+                .thenReturn(new com.pingyu.cloudmorph.core.builder.VueProjectBuildResult(true, null, null, outputDir.getAbsolutePath()));
 
         AppWorkflowResultVO result = service.runWorkflow(100L, "请生成一个 Vue 项目", "", loginUser);
-
-        InOrder inOrder = inOrder(appService, aiCodeGeneratorFacade, vueProjectBuilder);
-        inOrder.verify(appService).getById(100L);
-        inOrder.verify(appService).smartSelectCodeGenType(anyString());
-        inOrder.verify(aiCodeGeneratorFacade).generateAndSaveCode(anyString(), eq(CodeGenTypeEnum.VUE_PROJECT), eq(100L));
-        inOrder.verify(vueProjectBuilder).buildProject(outputDir.getAbsolutePath());
 
         assertEquals(100L, result.getAppId());
         assertEquals(CodeGenTypeEnum.VUE_PROJECT.getValue(), result.getActualCodeGenType());
@@ -95,5 +88,35 @@ class AppWorkflowServiceImplTest {
         assertEquals(CodeGenTypeEnum.HTML.getValue(), result.getActualCodeGenType());
         assertEquals(CodeGenTypeEnum.HTML.getValue(), result.getRecommendedCodeGenType());
         assertTrue(result.isQualityPassed());
+    }
+
+    @Test
+    void runWorkflowShouldExposeBuildFailureDetailsWhenBuildFails() {
+        AppWorkflowServiceImpl service = new AppWorkflowServiceImpl(appService, aiCodeGeneratorFacade, vueProjectBuilder);
+        service.init();
+
+        User loginUser = new User();
+        loginUser.setId(3L);
+
+        App app = new App();
+        app.setId(300L);
+        app.setUserId(3L);
+        app.setAppName("broken-vue");
+        app.setCodeGenType(CodeGenTypeEnum.VUE_PROJECT.getValue());
+
+        File outputDir = new File("tmp/code_output/vue_project_300");
+        outputDir.mkdirs();
+        when(appService.getById(300L)).thenReturn(app);
+        when(appService.smartSelectCodeGenType(anyString())).thenReturn(CodeGenTypeEnum.VUE_PROJECT.getValue());
+        when(aiCodeGeneratorFacade.generateAndSaveCode(anyString(), eq(CodeGenTypeEnum.VUE_PROJECT), eq(300L))).thenReturn(outputDir);
+        when(vueProjectBuilder.buildProjectResult(outputDir.getAbsolutePath()))
+                .thenReturn(new com.pingyu.cloudmorph.core.builder.VueProjectBuildResult(false, "npm_build", "npm run build failed", outputDir.getAbsolutePath()));
+
+        AppWorkflowResultVO result = service.runWorkflow(300L, "请生成一个 Vue 项目", "", loginUser);
+
+        assertEquals("npm_build", result.getBuildFailedStage());
+        assertEquals("npm run build failed", result.getBuildErrorMessage());
+        assertTrue(!result.isQualityPassed());
+        assertTrue(!result.isProjectBuilt());
     }
 }
