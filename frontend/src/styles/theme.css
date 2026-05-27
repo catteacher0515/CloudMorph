@@ -1,0 +1,27 @@
+:root {
+  --bg: #070809;
+  --bg-elevated: rgba(15, 17, 21, 0.72);
+  --bg-soft: rgba(255, 255, 255, 0.04);
+  --bg-halo: rgba(215, 154, 63, 0.08);
+  --text: #f5efe4;
+  --muted: rgba(245, 239, 228, 0.66);
+  --line: rgba(255, 255, 255, 0.09);
+  --accent: #d79a3f;
+  --accent-strong: #ffbe63;
+  --good: #7dd39c;
+  --warn: #f1c36c;
+  --danger: #ff7a67;
+  --shadow: 0 20px 80px rgba(0, 0, 0, 0.42);
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+}
+
+body {
+  font-family: ui-serif, Georgia, 'Times New Roman', serif;
+  background:
+    radial-gradient(circle at top left, rgba(215, 154, 63, 0.14), transparent 26%),
+    radial-gradient(circle at 80% 20%, rgba(255, 190, 99, 0.08), transparent 22%),
+    linear-gradient(180deg, #090a0c, #050607 72%);
+  color: var(--text);
+}
